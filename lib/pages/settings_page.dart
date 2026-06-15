@@ -1,9 +1,13 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../services/excel_export_service.dart';
 import '../services/import_export_service.dart';
+import '../services/storage_service.dart';
 import '../state/app_state.dart';
 import 'about_page.dart';
 import 'template/template_editor_page.dart';
@@ -49,6 +53,13 @@ class SettingsPage extends StatelessWidget {
               title: '数据导入/导出',
               subtitle: '将全部数据导出为文件，或从文件导入',
               onTap: () => _showDataSheet(context),
+            ),
+            _item(
+              context,
+              icon: Icons.table_view_outlined,
+              title: '导出 Excel 表格',
+              subtitle: '导出明细表格；含附件时连同附件打包为 zip',
+              onTap: () => _exportExcel(context),
             ),
           ]),
           _section('其他', [
@@ -139,10 +150,68 @@ class SettingsPage extends StatelessWidget {
         .toIso8601String()
         .replaceAll(':', '')
         .substring(0, 15);
-    final path =
-        await ImportExportService.saveJson('综测数据_$stamp.json', content);
+    final fileName = '综测数据_$stamp.json';
+    final path = await ImportExportService.saveJson(fileName, content);
     if (path != null) {
-      messenger.showSnackBar(SnackBar(content: Text('已导出到 $path')));
+      messenger.showSnackBar(
+          SnackBar(content: Text('已导出：${_savedLocation(fileName, path)}')));
+    }
+  }
+
+  /// 导出成功提示的位置文案：桌面端 saveFile 返回真实路径，直接显示；
+  /// 移动端返回的是 SAF 文档路径（非真实路径，会误导），改为只显示文件名
+  /// ——文件已保存到用户在系统保存框中选定的位置。
+  static String _savedLocation(String fileName, String path) {
+    final isDesktop = !kIsWeb &&
+        (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+    return isDesktop ? path : fileName;
+  }
+
+  Future<void> _exportExcel(BuildContext context) async {
+    final app = context.read<AppState>();
+    final storage = context.read<StorageService>();
+    final messenger = ScaffoldMessenger.of(context);
+    final svc = ExcelExportService(storage);
+
+    final years = [...app.activeYears, ...app.archivedYears];
+    final records = [for (final y in years) ...app.recordsOfYear(y.id)];
+    final stamp = DateTime.now()
+        .toIso8601String()
+        .replaceAll(RegExp(r'[:\-]'), '')
+        .substring(0, 13); // yyyyMMddTHHmm
+    final xlsxName = '综测记录_$stamp.xlsx';
+
+    try {
+      final xlsx = svc.buildWorkbook(
+          template: app.template, years: years, records: records);
+      final export = await svc.buildExportZip(
+        xlsxName: xlsxName,
+        xlsxBytes: xlsx,
+        years: years,
+        records: records,
+      );
+
+      if (export.attachmentCount == 0) {
+        // 没有附件：直接导出 .xlsx，方便直接打开（只弹一次保存框）。
+        final path =
+            await ExcelExportService.saveBytes(xlsxName, 'xlsx', xlsx);
+        if (path != null) {
+          messenger.showSnackBar(SnackBar(
+              content: Text('已导出表格（无附件）：${_savedLocation(xlsxName, path)}')));
+        }
+      } else {
+        // 有附件：表格 + 附件合并为一个 zip，只弹一次保存框。
+        final zipName = '综测导出_$stamp.zip';
+        final path =
+            await ExcelExportService.saveBytes(zipName, 'zip', export.bytes);
+        if (path != null) {
+          messenger.showSnackBar(SnackBar(
+              content: Text('已导出：表格 + ${export.attachmentCount} 个附件'
+                  '（${_savedLocation(zipName, path)}）')));
+        }
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('导出失败：$e')));
     }
   }
 

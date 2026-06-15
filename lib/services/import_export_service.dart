@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_picker/file_picker.dart';
 
 /// 导入/导出工具：保存与读取 JSON 文件，兼容桌面与移动端。
@@ -17,10 +18,12 @@ class ImportExportService {
       bytes: bytes,
     );
     if (path == null) return null;
-    // 桌面端 saveFile 仅返回路径，需自行写入；移动端已通过 bytes 写好。
-    final f = File(path);
-    if (!await f.exists() || (await f.length()) == 0) {
-      await f.writeAsBytes(bytes);
+    // 仅桌面端补写（移动端插件已写好，且返回的多为 SAF 非文件系统路径）。
+    if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+      final f = File(path);
+      if (!await f.exists() || (await f.length()) == 0) {
+        await f.writeAsBytes(bytes);
+      }
     }
     return path;
   }

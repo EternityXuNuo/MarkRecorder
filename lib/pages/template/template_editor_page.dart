@@ -212,14 +212,7 @@ class _TemplateEditorPageState extends State<TemplateEditorPage> {
   Widget _buildRules() {
     return Column(
       children: [
-        if (_t.scoreRules.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text('暂无计分规则',
-                style: TextStyle(color: Color(0xFF9AA0A6))),
-          ),
-        for (var i = 0; i < _t.scoreRules.length; i++)
-          _ruleTile(_t.scoreRules[i], i),
+        // 添加按钮置顶：规则较多时无需滚动到底部即可新增。
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
@@ -228,6 +221,14 @@ class _TemplateEditorPageState extends State<TemplateEditorPage> {
             label: const Text('添加规则'),
           ),
         ),
+        if (_t.scoreRules.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Text('暂无计分规则',
+                style: TextStyle(color: Color(0xFF9AA0A6))),
+          ),
+        for (var i = 0; i < _t.scoreRules.length; i++)
+          _ruleTile(_t.scoreRules[i], i),
       ],
     );
   }

@@ -40,7 +40,7 @@ void main() {
     final scoring = Scoring(template);
     final phys = template.categories.firstWhere((c) => c.name == '身心素养');
 
-    // 身心素养上限 25，未获奖每条 1 分，造 30 条 -> 截断到 25。
+    // 身心素养上限 15，未获奖每条 1 分，造 30 条 -> 截断到 15。
     final records = [
       for (var i = 0; i < 30; i++)
         ActivityRecord(
@@ -51,6 +51,6 @@ void main() {
           createdAt: DateTime.now(),
         )
     ];
-    expect(scoring.yearTotal(records), 25);
+    expect(scoring.yearTotal(records), 15);
   });
 }

@@ -1,24 +1,17 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#6E9BFF"/>
-      <stop offset="1" stop-color="#4C7EF3"/>
-    </linearGradient>
-  </defs>
+  <!-- 圆角方形背景（白底）+ 浅灰描边，便于在浅色背景下分辨边缘 -->
+  <rect x="8" y="8" width="1008" height="1008" rx="228" fill="#FFFFFF" stroke="#E2E2E2" stroke-width="8"/>
 
-  <!-- 圆角方形背景（品牌蓝渐变） -->
-  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
-
-  <!-- 清单：三行「勾选 + 条目」，极简白色 -->
-  <g stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round" fill="none">
+  <!-- 清单：三行「勾选 + 条目」，黑色（灰阶） -->
+  <g stroke="#1A1A1A" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <!-- 第一行 -->
     <path d="M306 372 L338 403 L398 333" stroke-width="48"/>
     <line x1="470" y1="372" x2="742" y2="372" stroke-width="44" opacity="0.95"/>
     <!-- 第二行 -->
     <path d="M306 512 L338 543 L398 473" stroke-width="48"/>
-    <line x1="470" y1="512" x2="742" y2="512" stroke-width="44" opacity="0.80"/>
+    <line x1="470" y1="512" x2="742" y2="512" stroke-width="44" opacity="0.70"/>
     <!-- 第三行 -->
     <path d="M306 652 L338 683 L398 613" stroke-width="48"/>
-    <line x1="470" y1="652" x2="678" y2="652" stroke-width="44" opacity="0.65"/>
+    <line x1="470" y1="652" x2="678" y2="652" stroke-width="44" opacity="0.50"/>
   </g>
 </svg>
