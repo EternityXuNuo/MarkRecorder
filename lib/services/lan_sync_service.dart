@@ -184,31 +184,88 @@ class LanSyncService {
   /// 服务绑定在 anyIPv4，IP 变化无需重启服务，只需更新展示值。
   Future<String?> currentLanIp() => _lanIp();
 
-  /// 取本机局域网 IPv4，优先私有网段（192.168 / 10 / 172.16-31）。
+  /// 解析本机“真正接入网络”的那块网卡的 IPv4。
+  ///
+  /// Windows 上常同时存在多块网卡（VMware / VirtualBox / Hyper-V / WSL / VPN 等
+  /// 虚拟网卡的地址也会落在 192.168 / 10 / 172 私网段），简单“枚举到第一个私网
+  /// 地址就返回”会经常取到虚拟网卡的错误地址。这里优先借系统路由表定位真正出网
+  /// 的网卡：对一个公网地址发起连接（仅触发选路、不真正传输数据），操作系统据路由
+  /// 选出的本地源地址即为正确的局域网 IP。无网络时退化为按网卡名排序的启发式枚举。
   Future<String?> _lanIp() async {
+    final routed = await _routedSourceIp();
+    if (routed != null && _isPrivateV4(routed)) return routed;
+
+    final ranked = await _rankedPrivateIp();
+    if (ranked != null) return ranked;
+
+    return routed; // 兜底：即便不在私网段，也好过返回 null
+  }
+
+  /// 借系统路由表选出真正出网网卡的源地址：连一个公网地址，读本地端地址。
+  /// 仅为触发选路，不依赖对方真正收发数据；失败（离线/被拦截）返回 null。
+  Future<String?> _routedSourceIp() async {
+    Socket? socket;
+    try {
+      socket = await Socket.connect('8.8.8.8', 443,
+          timeout: const Duration(milliseconds: 700));
+      return socket.address.address; // 本地源地址
+    } catch (_) {
+      return null;
+    } finally {
+      socket?.destroy();
+    }
+  }
+
+  /// 退化方案：枚举网卡，物理网卡（Wi-Fi / 以太网）优先，已知虚拟网卡靠后。
+  Future<String?> _rankedPrivateIp() async {
     final ifaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4, includeLoopback: false);
-    String? fallback;
+    String? best;
+    var bestScore = -1 << 30;
     for (final iface in ifaces) {
+      final score = _ifaceScore(iface.name);
       for (final addr in iface.addresses) {
-        final ip = addr.address;
-        fallback ??= ip;
-        if (ip.startsWith('192.168.') ||
-            ip.startsWith('10.') ||
-            _is172Private(ip)) {
-          return ip;
+        if (!_isPrivateV4(addr.address)) continue;
+        if (score > bestScore) {
+          bestScore = score;
+          best = addr.address;
         }
       }
     }
-    return fallback;
+    return best;
   }
 
-  static bool _is172Private(String ip) {
-    if (!ip.startsWith('172.')) return false;
-    final parts = ip.split('.');
-    if (parts.length < 2) return false;
-    final second = int.tryParse(parts[1]) ?? 0;
-    return second >= 16 && second <= 31;
+  /// 网卡名打分：物理网卡加分，已知虚拟网卡减分（大小写无关）。
+  static int _ifaceScore(String name) {
+    final n = name.toLowerCase();
+    const virtual = [
+      'vmware', 'virtualbox', 'vbox', 'vethernet', 'hyper-v', 'loopback',
+      'tailscale', 'wsl', 'docker', 'bluetooth', 'tap', 'tun', 'zerotier',
+      'radmin', 'npcap', 'virtual',
+    ];
+    const physical = [
+      'wi-fi', 'wifi', 'wlan', 'wireless', '无线', 'ethernet', '以太网', 'eth',
+    ];
+    var score = 0;
+    for (final k in virtual) {
+      if (n.contains(k)) score -= 100;
+    }
+    for (final k in physical) {
+      if (n.contains(k)) score += 50;
+    }
+    return score;
+  }
+
+  /// 是否 IPv4 私网段（192.168 / 10 / 172.16-31）。
+  static bool _isPrivateV4(String ip) {
+    if (ip.startsWith('192.168.') || ip.startsWith('10.')) return true;
+    if (ip.startsWith('172.')) {
+      final parts = ip.split('.');
+      if (parts.length < 2) return false;
+      final second = int.tryParse(parts[1]) ?? 0;
+      return second >= 16 && second <= 31;
+    }
+    return false;
   }
 
   /// 6 位数字配对码，便于手动输入，也编入二维码做鉴权。
