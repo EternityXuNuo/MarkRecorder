@@ -1,0 +1,267 @@
+{
+  "id": "default",
+  "name": "山东大学综合评价模板",
+  "version": 1,
+  "distinguishRoles": true,
+  "categories": [
+    {
+      "id": "cat_physical",
+      "name": "身心素养",
+      "color": 4287682815,
+      "yearCap": 15.0,
+      "hint": "体育锻炼、卫生健康等（基础性）+ 体育竞赛获奖（成果性）"
+    },
+    {
+      "id": "cat_art",
+      "name": "文艺素养",
+      "color": 4294938770,
+      "yearCap": 15.0,
+      "hint": "文艺爱好与艺术实践（基础性）+ 文艺展演/比赛获奖（成果性）"
+    },
+    {
+      "id": "cat_labor",
+      "name": "劳动素养",
+      "color": 4287667199,
+      "yearCap": 25.0,
+      "hint": "社会工作、社会实践、志愿服务、生涯发展、宿舍劳动等"
+    },
+    {
+      "id": "cat_innov",
+      "name": "创新素养",
+      "color": 4294086911,
+      "yearCap": 45.0,
+      "hint": "科技竞赛、创新创业、科研成果、论文专利（基础）+ 学科竞赛获奖（突破提升）"
+    }
+  ],
+  "awardLevels": [
+    "国家级",
+    "省部级",
+    "省级",
+    "地市级",
+    "校级",
+    "院级"
+  ],
+  "ranks": [
+    "一等奖",
+    "二等奖",
+    "三等奖"
+  ],
+  "roles": [
+    "负责人",
+    "主要成员",
+    "参与成员"
+  ],
+  "scoreRules": [
+    {
+      "categoryId": "cat_innov",
+      "awarded": true,
+      "awardLevel": "国家级",
+      "rank": "一等奖",
+      "points": 10.0
+    },
+    {
+      "categoryId": "cat_innov",
+      "awarded": true,
+      "awardLevel": "国家级",
+      "rank": "二等奖",
+      "points": 8.0
+    },
+    {
+      "categoryId": "cat_innov",
+      "awarded": true,
+      "awardLevel": "国家级",
+      "rank": "三等奖",
+      "points": 6.0
+    },
+    {
+      "categoryId": "cat_innov",
+      "awarded": true,
+      "awardLevel": "省级",
+      "rank": "一等奖",
+      "points": 6.0
+    },
+    {
+      "categoryId": "cat_innov",
+      "awarded": true,
+      "awardLevel": "省级",
+      "rank": "二等奖",
+      "points": 4.0
+    },
+    {
+      "categoryId": "cat_innov",
+      "awarded": true,
+      "awardLevel": "省级",
+      "rank": "三等奖",
+      "points": 3.0
+    },
+    {
+      "categoryId": "cat_innov",
+      "awarded": true,
+      "awardLevel": "校级",
+      "rank": "一等奖",
+      "points": 3.0
+    },
+    {
+      "categoryId": "cat_innov",
+      "awarded": true,
+      "awardLevel": "校级",
+      "rank": "二等奖",
+      "points": 2.0
+    },
+    {
+      "categoryId": "cat_innov",
+      "awarded": true,
+      "awardLevel": "校级",
+      "rank": "三等奖",
+      "points": 1.0
+    },
+    {
+      "categoryId": "cat_innov",
+      "awarded": false,
+      "points": 1.0
+    },
+    {
+      "categoryId": "cat_labor",
+      "awarded": true,
+      "awardLevel": "国家级",
+      "points": 10.0
+    },
+    {
+      "categoryId": "cat_labor",
+      "awarded": true,
+      "awardLevel": "省部级",
+      "points": 8.5
+    },
+    {
+      "categoryId": "cat_labor",
+      "awarded": true,
+      "awardLevel": "地市级",
+      "points": 7.0
+    },
+    {
+      "categoryId": "cat_labor",
+      "awarded": true,
+      "awardLevel": "校级",
+      "points": 5.5
+    },
+    {
+      "categoryId": "cat_labor",
+      "awarded": true,
+      "awardLevel": "院级",
+      "points": 4.0
+    },
+    {
+      "categoryId": "cat_labor",
+      "awarded": false,
+      "points": 2.0
+    },
+    {
+      "categoryId": "cat_art",
+      "awarded": true,
+      "awardLevel": "国家级",
+      "rank": "一等奖",
+      "points": 6.0
+    },
+    {
+      "categoryId": "cat_art",
+      "awarded": true,
+      "awardLevel": "国家级",
+      "rank": "二等奖",
+      "points": 4.5
+    },
+    {
+      "categoryId": "cat_art",
+      "awarded": true,
+      "awardLevel": "省级",
+      "rank": "一等奖",
+      "points": 4.5
+    },
+    {
+      "categoryId": "cat_art",
+      "awarded": true,
+      "awardLevel": "省级",
+      "rank": "二等奖",
+      "points": 3.0
+    },
+    {
+      "categoryId": "cat_art",
+      "awarded": true,
+      "awardLevel": "校级",
+      "rank": "一等奖",
+      "points": 2.25
+    },
+    {
+      "categoryId": "cat_art",
+      "awarded": true,
+      "awardLevel": "校级",
+      "rank": "二等奖",
+      "points": 1.5
+    },
+    {
+      "categoryId": "cat_art",
+      "awarded": false,
+      "points": 1.0
+    },
+    {
+      "categoryId": "cat_physical",
+      "awarded": true,
+      "awardLevel": "国家级",
+      "rank": "一等奖",
+      "points": 6.0
+    },
+    {
+      "categoryId": "cat_physical",
+      "awarded": true,
+      "awardLevel": "国家级",
+      "rank": "二等奖",
+      "points": 5.25
+    },
+    {
+      "categoryId": "cat_physical",
+      "awarded": true,
+      "awardLevel": "国家级",
+      "rank": "三等奖",
+      "points": 4.5
+    },
+    {
+      "categoryId": "cat_physical",
+      "awarded": true,
+      "awardLevel": "省级",
+      "rank": "一等奖",
+      "points": 4.5
+    },
+    {
+      "categoryId": "cat_physical",
+      "awarded": true,
+      "awardLevel": "省级",
+      "rank": "二等奖",
+      "points": 3.75
+    },
+    {
+      "categoryId": "cat_physical",
+      "awarded": true,
+      "awardLevel": "省级",
+      "rank": "三等奖",
+      "points": 3.0
+    },
+    {
+      "categoryId": "cat_physical",
+      "awarded": true,
+      "awardLevel": "校级",
+      "rank": "一等奖",
+      "points": 2.25
+    },
+    {
+      "categoryId": "cat_physical",
+      "awarded": true,
+      "awardLevel": "校级",
+      "rank": "二等奖",
+      "points": 1.5
+    },
+    {
+      "categoryId": "cat_physical",
+      "awarded": false,
+      "points": 1.0
+    }
+  ]
+}
