@@ -114,7 +114,7 @@ class _WebdavSettingsPageState extends State<WebdavSettingsPage> {
                     color: Color(0xFF34A853)),
                 title: const Text('从云端恢复',
                     style: TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: const Text('使用云端数据覆盖本地数据'),
+                subtitle: const Text('与云端数据合并，或用云端数据覆盖本地'),
                 onTap: _confirmRestore,
               ),
             ]),
@@ -218,22 +218,27 @@ class _WebdavSettingsPageState extends State<WebdavSettingsPage> {
   }
 
   Future<void> _confirmRestore() async {
-    final ok = await showDialog<bool>(
+    final mode = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('从云端恢复'),
-        content: const Text('这将使用云端数据覆盖本地的模板、记录与附件，确定继续吗？'),
+        content: const Text(
+            '合并：将云端与本地数据按"较新的为准"合并，两端的记录都会保留（推荐）。\n\n'
+            '覆盖：用云端数据完全替换本地的模板、记录与附件，本地多出的内容会丢失。'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(context, null),
               child: const Text('取消')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, 'overwrite'),
+              child: const Text('覆盖')),
           FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('恢复')),
+              onPressed: () => Navigator.pop(context, 'merge'),
+              child: const Text('合并')),
         ],
       ),
     );
-    if (ok == true) {
+    if (mode == 'overwrite') {
       await _run('恢复中', () async {
         await _service.restore(
           url: _urlCtrl.text.trim(),
@@ -242,7 +247,51 @@ class _WebdavSettingsPageState extends State<WebdavSettingsPage> {
         );
         if (mounted) await context.read<AppState>().load();
       });
+    } else if (mode == 'merge') {
+      if (_urlCtrl.text.trim().isEmpty) {
+        _toast('请先填写服务器地址');
+        return;
+      }
+      setState(() {
+        _busy = true;
+        _busyLabel = '合并中';
+      });
+      try {
+        final msg = await _mergeFromCloud();
+        if (mounted) _toast(msg);
+      } catch (e) {
+        if (mounted) _toast('合并失败：$e');
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
     }
+  }
+
+  Future<String> _mergeFromCloud() async {
+    final app = context.read<AppState>();
+    final url = _urlCtrl.text.trim();
+    final user = _userCtrl.text.trim();
+    final pass = _passCtrl.text;
+    final remote = await _service.fetchSnapshot(
+      url: url,
+      user: user,
+      pass: pass,
+      fallbackTemplate: app.template,
+    );
+    final result = await app.mergeSnapshot(remote);
+    // 仅补齐本地缺失的附件。
+    await _service.downloadAttachments(
+      result.neededAttachments,
+      url: url,
+      user: user,
+      pass: pass,
+    );
+    // 合并后回传一次，使云端也成为两端的并集。
+    await _service.backup(url: url, user: user, pass: pass);
+    if (mounted) {
+      await context.read<SettingsState>().setLastBackup(DateTime.now());
+    }
+    return '合并完成：新增 ${result.added}，更新 ${result.updated}，删除 ${result.deleted}（已回传云端）';
   }
 
   void _toast(String msg) {

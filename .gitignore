@@ -47,3 +47,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+# 签名机密：绝不提交（key.properties 已由 android/.gitignore 覆盖，这里双保险）
+**/key.properties
+*.jks
+*.keystore

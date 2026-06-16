@@ -32,22 +32,31 @@ class AttachmentService {
       allowedExtensions: allowedExtensions,
     );
     if (result == null) return [];
+    return importPaths(result.files.map((f) => f.path).whereType<String>());
+  }
 
+  /// 从文件路径导入（桌面端拖拽添加附件用）。
+  /// 仅接受 [allowedExtensions] 内的扩展名，其余忽略。返回新建的 Attachment。
+  Future<List<Attachment>> importPaths(Iterable<String> paths) async {
+    if (kIsWeb) return [];
     final dir = await _storage.attachmentsDir();
     final imported = <Attachment>[];
-    for (final f in result.files) {
-      if (f.path == null) continue;
-      final ext = p.extension(f.name).replaceFirst('.', '').toLowerCase();
+    for (final path in paths) {
+      final name = p.basename(path);
+      final ext = p.extension(name).replaceFirst('.', '').toLowerCase();
+      if (!allowedExtensions.contains(ext)) continue;
+      final src = File(path);
+      if (!await src.exists()) continue;
       final id = _uuid.v4();
       final storedName = '$id.$ext';
       final dest = File(p.join(dir.path, storedName));
-      await File(f.path!).copy(dest.path);
+      await src.copy(dest.path);
       imported.add(Attachment(
         id: id,
         storedName: storedName,
-        displayName: f.name,
+        displayName: name,
         extension: ext,
-        sizeBytes: f.size,
+        sizeBytes: await dest.length(),
         addedAt: DateTime.now(),
       ));
     }

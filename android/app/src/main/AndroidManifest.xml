@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 网络：WebDAV 备份与局域网同步 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 相机：局域网同步扫码配对 -->
+    <uses-permission android:name="android.permission.CAMERA"/>
     <application
         android:label="综测笺"
         android:name="${applicationName}"
@@ -40,6 +44,11 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- 让 url_launcher 能在 Android 11+ 解析浏览器，打开 GitHub 下载页 -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
         </intent>
     </queries>
 </manifest>

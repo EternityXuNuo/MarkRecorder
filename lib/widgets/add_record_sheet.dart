@@ -1,3 +1,7 @@
+import 'dart:io' show Platform;
+
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -48,6 +52,11 @@ class _RecordSheetState extends State<_RecordSheet> {
   String? _role;
   List<Attachment> _attachments = [];
   bool _nameError = false;
+  bool _dragging = false;
+
+  /// 桌面端才支持拖拽添加附件。
+  bool get _canDrop =>
+      !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
   @override
   void initState() {
@@ -339,31 +348,91 @@ class _RecordSheetState extends State<_RecordSheet> {
   Widget _attachmentSection() {
     final storage = context.read<StorageService>();
     final svc = AttachmentService(storage);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+
+    final chips = Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        for (final a in _attachments)
+          AttachmentChip(
+            attachment: a,
+            onRemove: () => setState(() => _attachments.remove(a)),
+          ),
+        ActionChip(
+          avatar: const Icon(Icons.attach_file, size: 18),
+          label: const Text('添加附件'),
+          onPressed: () async {
+            final picked = await svc.pickAndImport();
+            if (picked.isNotEmpty) {
+              setState(() => _attachments.addAll(picked));
+            }
+          },
+        ),
+      ],
+    );
+
+    // 移动端/Web：仅展示选择按钮与已选附件。
+    if (!_canDrop) return chips;
+
+    // 桌面端：套一层拖拽放置区，拖入文件即导入。
+    return DropTarget(
+      onDragEntered: (_) => setState(() => _dragging = true),
+      onDragExited: (_) => setState(() => _dragging = false),
+      onDragDone: (detail) async {
+        setState(() => _dragging = false);
+        final paths = detail.files.map((f) => f.path).toList();
+        final imported = await svc.importPaths(paths);
+        if (imported.isNotEmpty) {
+          setState(() => _attachments.addAll(imported));
+        }
+        final skipped = paths.length - imported.length;
+        if (skipped > 0 && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已忽略 $skipped 个不支持的文件')),
+          );
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: _dragging ? const Color(0x144C7EF3) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _dragging ? const Color(0xFF4C7EF3) : const Color(0xFFE2E2E2),
+            width: _dragging ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final a in _attachments)
-              AttachmentChip(
-                attachment: a,
-                onRemove: () => setState(() => _attachments.remove(a)),
-              ),
-            ActionChip(
-              avatar: const Icon(Icons.attach_file, size: 18),
-              label: const Text('添加附件'),
-              onPressed: () async {
-                final picked = await svc.pickAndImport();
-                if (picked.isNotEmpty) {
-                  setState(() => _attachments.addAll(picked));
-                }
-              },
+            chips,
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.file_download_outlined,
+                    size: 16,
+                    color: _dragging
+                        ? const Color(0xFF4C7EF3)
+                        : const Color(0xFF9AA0A6)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _dragging ? '松开以添加文件' : '也可将文件拖拽到此处添加',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: _dragging
+                          ? const Color(0xFF4C7EF3)
+                          : const Color(0xFF9AA0A6),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
-      ],
+      ),
     );
   }
 

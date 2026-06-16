@@ -1,0 +1,68 @@
+name: Build Windows Installer
+
+# 手动触发，或推送 v* 标签时自动构建并发布到 Release
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write   # 推送 v* 标签时创建/更新 Release 需要
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.6'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Read app version
+        id: ver
+        shell: pwsh
+        run: |
+          $line = Select-String -Path pubspec.yaml -Pattern '^version:\s*(.+)$' | Select-Object -First 1
+          $full = $line.Matches[0].Groups[1].Value.Trim()   # 形如 1.1.0+2
+          $ver = $full.Split('+')[0]                          # 取 1.1.0
+          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "App version: $ver"
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          $release = "$PWD\build\windows\x64\runner\Release"
+          & "$iscc" `
+            "/DReleaseDir=$release" `
+            "/DMyAppVersion=${{ steps.ver.outputs.version }}" `
+            "windows\installer\mark_recoder.iss"
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MarkRecorder-Windows-Setup-${{ steps.ver.outputs.version }}
+          path: build/windows/installer/*.exe
+          if-no-files-found: error
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/windows/installer/*.exe

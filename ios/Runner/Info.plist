@@ -4,6 +4,10 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>用于扫描二维码，与同一局域网内的另一台设备同步综测数据。</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>用于在同一局域网内与另一台设备直接传输并同步综测数据。</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:webdav_client/webdav_client.dart' as webdav;
 
+import '../models/template.dart';
+import 'merge_service.dart';
 import 'storage_service.dart';
 
 /// WebDAV 备份服务：将本地数据（模板、记录、附件）打包上传，及从云端恢复。
@@ -87,6 +90,66 @@ class BackupService {
       }
     } catch (_) {
       // 远端无附件目录。
+    }
+  }
+
+  /// 读取云端快照到内存（不落地、不覆盖本地），供"合并"恢复使用。
+  /// 远端缺 template.json 时退回 [fallbackTemplate]（其时间戳与本地相同，
+  /// 合并时按"较新者胜"自然保留本地模板）。
+  Future<SyncSnapshot> fetchSnapshot({
+    required String url,
+    required String user,
+    required String pass,
+    required Template fallbackTemplate,
+  }) async {
+    final client = _client(url, user, pass);
+
+    Template template = fallbackTemplate;
+    try {
+      final bytes = await client.read('$remoteDir/template.json');
+      template = Template.fromJson(
+          jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>);
+    } catch (_) {
+      // 远端无模板，沿用本地。
+    }
+
+    var data = const DataBundle.empty();
+    try {
+      final bytes = await client.read('$remoteDir/data.json');
+      data = DataBundle.fromJson(
+          jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>);
+    } catch (_) {
+      // 远端无数据。
+    }
+
+    return SyncSnapshot(
+      template: template,
+      years: data.years,
+      records: data.records,
+      deletedYears: data.deletedYears,
+      deletedRecords: data.deletedRecords,
+    );
+  }
+
+  /// 从云端下载指定附件到本地附件目录。[skipExisting] 为真时跳过本地已存在的，
+  /// 合并恢复只需补齐本地缺失的附件。
+  Future<void> downloadAttachments(
+    Iterable<String> storedNames, {
+    required String url,
+    required String user,
+    required String pass,
+    bool skipExisting = true,
+  }) async {
+    final client = _client(url, user, pass);
+    final attachDir = await _storage.attachmentsDir();
+    for (final name in storedNames) {
+      final f = File(p.join(attachDir.path, name));
+      if (skipExisting && await f.exists()) continue;
+      try {
+        await client.read2File('$remoteDir/attachments/$name', f.path);
+      } catch (_) {
+        // 单个附件缺失或失败，跳过，不中断整体合并。
+      }
     }
   }
 }

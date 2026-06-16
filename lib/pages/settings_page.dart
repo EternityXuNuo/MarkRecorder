@@ -10,6 +10,7 @@ import '../services/import_export_service.dart';
 import '../services/storage_service.dart';
 import '../state/app_state.dart';
 import 'about_page.dart';
+import 'lan_sync_page.dart';
 import 'template/template_editor_page.dart';
 import 'webdav_settings_page.dart';
 
@@ -45,6 +46,16 @@ class SettingsPage extends StatelessWidget {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const WebdavSettingsPage()),
+              ),
+            ),
+            _item(
+              context,
+              icon: Icons.sync_alt,
+              title: '局域网同步',
+              subtitle: '同一 Wi-Fi 下扫码，与另一台设备双向合并',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LanSyncPage()),
               ),
             ),
             _item(

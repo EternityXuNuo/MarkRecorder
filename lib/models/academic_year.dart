@@ -12,18 +12,23 @@ class AcademicYear {
 
   final DateTime createdAt;
 
-  const AcademicYear({
+  /// 最后修改时间。用于多设备同步时按"较新者胜"合并。
+  final DateTime updatedAt;
+
+  AcademicYear({
     required this.id,
     required this.name,
     this.archived = false,
     required this.order,
     required this.createdAt,
-  });
+    DateTime? updatedAt,
+  }) : updatedAt = updatedAt ?? createdAt;
 
   AcademicYear copyWith({
     String? name,
     bool? archived,
     int? order,
+    DateTime? updatedAt,
   }) {
     return AcademicYear(
       id: id,
@@ -31,6 +36,8 @@ class AcademicYear {
       archived: archived ?? this.archived,
       order: order ?? this.order,
       createdAt: createdAt,
+      // copyWith 视为一次编辑，默认刷新修改时间。
+      updatedAt: updatedAt ?? DateTime.now(),
     );
   }
 
@@ -40,6 +47,7 @@ class AcademicYear {
         'archived': archived,
         'order': order,
         'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
       };
 
   factory AcademicYear.fromJson(Map<String, dynamic> json) => AcademicYear(
@@ -48,5 +56,8 @@ class AcademicYear {
         archived: json['archived'] as bool? ?? false,
         order: json['order'] as int? ?? 0,
         createdAt: DateTime.parse(json['createdAt'] as String),
+        updatedAt: json['updatedAt'] != null
+            ? DateTime.parse(json['updatedAt'] as String)
+            : null,
       );
 }

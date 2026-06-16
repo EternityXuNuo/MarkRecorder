@@ -35,7 +35,11 @@ class ActivityRecord {
 
   final DateTime createdAt;
 
-  const ActivityRecord({
+  /// 最后修改时间。用于多设备同步时按"较新者胜"合并。
+  /// 旧数据缺该字段时回退为 [createdAt]。
+  final DateTime updatedAt;
+
+  ActivityRecord({
     required this.id,
     required this.name,
     required this.yearId,
@@ -48,7 +52,8 @@ class ActivityRecord {
     this.attachments = const [],
     this.note,
     required this.createdAt,
-  });
+    DateTime? updatedAt,
+  }) : updatedAt = updatedAt ?? createdAt;
 
   bool get hasAttachment => attachments.isNotEmpty;
 
@@ -67,6 +72,7 @@ class ActivityRecord {
     bool clearRole = false,
     List<Attachment>? attachments,
     String? note,
+    DateTime? updatedAt,
   }) {
     return ActivityRecord(
       id: id,
@@ -81,6 +87,8 @@ class ActivityRecord {
       attachments: attachments ?? this.attachments,
       note: note ?? this.note,
       createdAt: createdAt,
+      // copyWith 视为一次编辑，默认刷新修改时间。
+      updatedAt: updatedAt ?? DateTime.now(),
     );
   }
 
@@ -97,6 +105,7 @@ class ActivityRecord {
         'attachments': attachments.map((e) => e.toJson()).toList(),
         if (note != null) 'note': note,
         'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
       };
 
   factory ActivityRecord.fromJson(Map<String, dynamic> json) => ActivityRecord(
@@ -114,5 +123,8 @@ class ActivityRecord {
             .toList(),
         note: json['note'] as String?,
         createdAt: DateTime.parse(json['createdAt'] as String),
+        updatedAt: json['updatedAt'] != null
+            ? DateTime.parse(json['updatedAt'] as String)
+            : null,
       );
 }

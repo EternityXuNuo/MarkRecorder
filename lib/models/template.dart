@@ -24,7 +24,10 @@ class Template {
 
   final List<ScoreRule> scoreRules;
 
-  const Template({
+  /// 最后修改时间。多设备同步时整模板按"较新者胜"。
+  final DateTime updatedAt;
+
+  Template({
     required this.id,
     required this.name,
     this.version = 1,
@@ -34,7 +37,8 @@ class Template {
     this.ranks = const [],
     this.roles = const [],
     this.scoreRules = const [],
-  });
+    DateTime? updatedAt,
+  }) : updatedAt = updatedAt ?? DateTime.now();
 
   /// 学年分数上限 = 各分类活动上限之和。学年不再单独存储上限，统一由模板派生。
   double get yearScoreCap =>
@@ -57,6 +61,7 @@ class Template {
     List<String>? ranks,
     List<String>? roles,
     List<ScoreRule>? scoreRules,
+    DateTime? updatedAt,
   }) {
     return Template(
       id: id,
@@ -68,6 +73,8 @@ class Template {
       ranks: ranks ?? this.ranks,
       roles: roles ?? this.roles,
       scoreRules: scoreRules ?? this.scoreRules,
+      // copyWith 视为一次编辑，默认刷新修改时间。
+      updatedAt: updatedAt ?? DateTime.now(),
     );
   }
 
@@ -81,6 +88,7 @@ class Template {
         'ranks': ranks,
         'roles': roles,
         'scoreRules': scoreRules.map((e) => e.toJson()).toList(),
+        'updatedAt': updatedAt.toIso8601String(),
       };
 
   factory Template.fromJson(Map<String, dynamic> json) => Template(
@@ -103,5 +111,9 @@ class Template {
         scoreRules: (json['scoreRules'] as List<dynamic>? ?? [])
             .map((e) => ScoreRule.fromJson(e as Map<String, dynamic>))
             .toList(),
+        // 旧模板无 updatedAt：回退到 epoch，使带真实时间戳的模板在合并时胜出。
+        updatedAt: json['updatedAt'] != null
+            ? DateTime.parse(json['updatedAt'] as String)
+            : DateTime.fromMillisecondsSinceEpoch(0),
       );
 }
