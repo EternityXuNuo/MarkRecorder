@@ -186,24 +186,24 @@ class LanSyncService {
 
   /// 解析本机“真正接入网络”的那块网卡的 IPv4。
   ///
-  /// Windows 上常同时存在多块网卡（VMware / VirtualBox / Hyper-V / WSL / VPN 等
-  /// 虚拟网卡的地址也会落在 192.168 / 10 / 172 私网段），简单“枚举到第一个私网
-  /// 地址就返回”会经常取到虚拟网卡的错误地址。这里优先借系统路由表定位真正出网
-  /// 的网卡：对一个公网地址发起连接（仅触发选路、不真正传输数据），操作系统据路由
-  /// 选出的本地源地址即为正确的局域网 IP。无网络时退化为按网卡名排序的启发式枚举。
+  /// Windows 上常同时存在多块网卡（VMware / Hyper-V / WSL / VPN 等虚拟网卡，以及
+  /// 已拔线但 IP 仍残留的有线网卡，地址都会落在 192.168 / 10 / 172 私网段），简单
+  /// “枚举到第一个私网地址就返回”会取错。Dart 的 Socket 不暴露本地源地址，无法直接
+  /// 读“系统选了哪块网卡”，故反过来逐一把候选 IP 指定为 sourceAddress 去连公网：
+  /// 能连通的那块才是真正出网的网卡（不存在/无路由/已拔线的地址会瞬间失败）。
+  /// 候选按网卡名评分排序（无线/热点 > 有线 > 虚拟），全不可达时退化取评分最高者，
+  /// 从而即便手机热点探测偶发超时，也只会落到无线而非残留的有线 IP。
   Future<String?> _lanIp() async {
-    final candidates = await _privateCandidates(); // 已按物理网卡优先排序
-    // 逐个把候选 IP 当源地址探测公网可达性：能连通的才是真正出网的网卡。
-    // Dart 的 Socket 不暴露本地源地址，无法直接读“系统选了哪块网卡”，
-    // 故反过来逐一指定 sourceAddress 主动验证（不存在/无路由的地址会瞬间失败）。
+    final candidates = await _privateCandidates(); // 已按无线优先排序
     for (final ip in candidates) {
       if (await _reachesInternet(ip)) return ip;
     }
-    // 全不可达（隔离局域网 / 离线）：退化为评分最高的候选。
+    // 全不可达（隔离局域网 / 离线 / 探测全超时）：退化为评分最高的候选。
     return candidates.isEmpty ? null : candidates.first;
   }
 
-  /// 收集本机私网 IPv4，按网卡名评分降序（物理网卡在前、已知虚拟网卡在后）。
+  /// 收集本机私网 IPv4，按网卡名评分降序排序；同分再按 IP 字典序，保证结果确定，
+  /// 不会因排序不稳定而在多次刷新间翻转。
   Future<List<String>> _privateCandidates() async {
     final ifaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4, includeLoopback: false);
@@ -216,17 +216,21 @@ class LanSyncService {
         }
       }
     }
-    scored.sort((a, b) => b.score.compareTo(a.score));
+    scored.sort((a, b) {
+      final byScore = b.score.compareTo(a.score);
+      return byScore != 0 ? byScore : a.ip.compareTo(b.ip);
+    });
     return [for (final e in scored) e.ip];
   }
 
   /// 以 [sourceIp] 为源地址尝试连公网：成功即说明该网卡能出网（真正的局域网网卡）。
-  /// 不存在 / 无路由的源地址会立即失败，不会卡满超时。
+  /// 不存在 / 无路由 / 已拔线的源地址会立即失败；超时放宽到 1.5s，给走蜂窝的手机
+  /// 热点（握手较慢）留出足够余量，避免误判为不可达而回退到错误网卡。
   Future<bool> _reachesInternet(String sourceIp) async {
     Socket? socket;
     try {
       socket = await Socket.connect('8.8.8.8', 443,
-          sourceAddress: sourceIp, timeout: const Duration(milliseconds: 700));
+          sourceAddress: sourceIp, timeout: const Duration(milliseconds: 1500));
       return true;
     } catch (_) {
       return false;
@@ -235,7 +239,9 @@ class LanSyncService {
     }
   }
 
-  /// 网卡名打分：物理网卡加分，已知虚拟网卡减分（大小写无关）。
+  /// 网卡名打分（大小写无关）：无线/热点优先于有线，二者都优先于已知虚拟网卡。
+  /// 无线高于有线是为了：手机热点必走无线，且当有线网卡拔线后 IP 仍残留时，回退
+  /// 也不会落到那个残留的有线 IP 上。
   static int _ifaceScore(String name) {
     final n = name.toLowerCase();
     const virtual = [
@@ -243,14 +249,16 @@ class LanSyncService {
       'tailscale', 'wsl', 'docker', 'bluetooth', 'tap', 'tun', 'zerotier',
       'radmin', 'npcap', 'virtual',
     ];
-    const physical = [
-      'wi-fi', 'wifi', 'wlan', 'wireless', '无线', 'ethernet', '以太网', 'eth',
-    ];
+    const wireless = ['wi-fi', 'wifi', 'wlan', 'wireless', '无线'];
+    const wired = ['ethernet', '以太网', 'eth'];
     var score = 0;
     for (final k in virtual) {
       if (n.contains(k)) score -= 100;
     }
-    for (final k in physical) {
+    for (final k in wireless) {
+      if (n.contains(k)) score += 60;
+    }
+    for (final k in wired) {
       if (n.contains(k)) score += 50;
     }
     return score;
