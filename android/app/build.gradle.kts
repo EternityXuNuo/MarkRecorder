@@ -62,6 +62,18 @@ android {
             }
         }
     }
+
+    // 将 release 安装包文件名里的 “-release” 改为版本号，
+    // 例如 app-arm64-v8a-release.apk -> app-arm64-v8a-1.1.0.apk。
+    // 仅影响 release（debug 包名不含 “-release”，替换无副作用）。
+    applicationVariants.all {
+        val versionName = this.versionName
+        outputs.all {
+            val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            output.outputFileName =
+                output.outputFileName.replace("-release", "-$versionName")
+        }
+    }
 }
 
 flutter {
