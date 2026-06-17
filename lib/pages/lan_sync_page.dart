@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
@@ -11,8 +11,8 @@ import '../services/lan_sync_service.dart';
 import '../services/storage_service.dart';
 import '../state/app_state.dart';
 
-/// 配对信息（局域网主机地址 + 端口 + 配对码）。
-typedef _Conn = ({String host, int port, String token});
+/// 配对信息（局域网主机候选地址列表 + 端口 + 配对码）。
+typedef _Conn = ({List<String> hosts, int port, String token});
 
 /// 局域网同步页：一端生成二维码（被连接），另一端扫码或手动连接。
 /// 连接后双向合并，两端都成为并集。
@@ -46,15 +46,15 @@ class _LanSyncPageState extends State<LanSyncPage> {
     super.dispose();
   }
 
-  /// 托管期间定时重新解析局域网 IP；网络环境变化（切换 Wi-Fi 等）时刷新二维码。
+  /// 托管期间定时重新解析局域网候选 IP；网络环境变化（切换 Wi-Fi/热点等）时刷新二维码。
   void _startIpWatch() {
     _ipWatch?.cancel();
     _ipWatch = Timer.periodic(const Duration(seconds: 3), (_) async {
       if (!mounted || _info == null) return;
-      final ip = await _svc.currentLanIp();
+      final ips = await _svc.currentLanIps();
       if (!mounted || _info == null) return;
-      if (ip != _info!.ip) {
-        setState(() => _info = _info!.withIp(ip));
+      if (!listEquals(ips, _info!.ips)) {
+        setState(() => _info = _info!.withIps(ips));
       }
     });
   }
@@ -129,7 +129,9 @@ class _LanSyncPageState extends State<LanSyncPage> {
 
   Widget _hostCard() {
     final info = _info!;
-    final addr = info.ip == null ? '未取得局域网地址' : '${info.ip}:${info.port}';
+    final addr = info.ips.isEmpty
+        ? '未取得局域网地址'
+        : info.ips.map((ip) => '$ip:${info.port}').join('\n');
     return _card([
       const Text('等待其它设备扫码连接',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
@@ -150,7 +152,7 @@ class _LanSyncPageState extends State<LanSyncPage> {
         ),
       ),
       const SizedBox(height: 16),
-      _kv('局域网地址', addr),
+      _kv(info.ips.length > 1 ? '局域网地址（任一可用）' : '局域网地址', addr),
       const SizedBox(height: 8),
       _kv('配对码', info.token),
       if (_hostStatus != null) ...[
@@ -181,6 +183,7 @@ class _LanSyncPageState extends State<LanSyncPage> {
   }
 
   Widget _kv(String k, String v) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('$k：',
               style: const TextStyle(
@@ -239,14 +242,21 @@ class _LanSyncPageState extends State<LanSyncPage> {
     final app = context.read<AppState>();
     setState(() {
       _busy = true;
-      _busyLabel = '同步中';
+      _busyLabel = '连接中';
     });
     try {
+      // 先从候选地址里挑出能连通的那个（即与本机同子网的那块网卡）。
+      final host = await _svc.pickReachableHost(hosts: c.hosts, port: c.port);
+      if (host == null) {
+        _toast('无法连接：请确认两台设备在同一 Wi-Fi/热点下');
+        return;
+      }
+      if (mounted) setState(() => _busyLabel = '同步中');
       // 拉对方快照（顺带落地对方附件）→ 本地合并为并集 → 回传并集给对方。
-      final remote = await _svc.pull(host: c.host, port: c.port, token: c.token);
+      final remote = await _svc.pull(host: host, port: c.port, token: c.token);
       final r = await app.mergeSnapshot(remote);
       await _svc.push(
-        host: c.host,
+        host: host,
         port: c.port,
         token: c.token,
         snapshot: app.exportSnapshot(),
@@ -414,7 +424,8 @@ class _ManualDialogState extends State<_ManualDialog> {
                   const SnackBar(content: Text('请完整填写地址、端口与配对码')));
               return;
             }
-            Navigator.pop<_Conn>(context, (host: host, port: port, token: token));
+            Navigator.pop<_Conn>(
+                context, (hosts: [host], port: port, token: token));
           },
           child: const Text('连接'),
         ),

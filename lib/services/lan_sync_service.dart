@@ -67,7 +67,8 @@ class LanSyncService {
       }
     });
 
-    return LanServerInfo(ip: await _lanIp(), port: server.port, token: token);
+    return LanServerInfo(
+        ips: await _privateCandidates(), port: server.port, token: token);
   }
 
   Future<void> stop() async {
@@ -180,30 +181,38 @@ class LanSyncService {
     return Uint8List.fromList(chunks);
   }
 
-  /// 重新解析本机当前局域网 IPv4（网络环境变化后用于刷新二维码）。
-  /// 服务绑定在 anyIPv4，IP 变化无需重启服务，只需更新展示值。
-  Future<String?> currentLanIp() => _lanIp();
+  /// 重新解析本机当前的全部局域网候选 IPv4（网络环境变化后用于刷新二维码）。
+  /// 服务绑定在 anyIPv4，任意网卡上的连接都能收，故无需在主机侧猜“哪个 IP 对”——
+  /// 把全部候选都放进二维码，由对端逐个试连，能连通的那个（即同子网的那块）自然胜出。
+  Future<List<String>> currentLanIps() => _privateCandidates();
 
-  /// 解析本机“真正接入网络”的那块网卡的 IPv4。
+  /// 连接端：在候选地址里挑出第一个能连通的主机。
   ///
-  /// Windows 上常同时存在多块网卡（VMware / Hyper-V / WSL / VPN 等虚拟网卡，以及
-  /// 已拔线但 IP 仍残留的有线网卡，地址都会落在 192.168 / 10 / 172 私网段），简单
-  /// “枚举到第一个私网地址就返回”会取错。Dart 的 Socket 不暴露本地源地址，无法直接
-  /// 读“系统选了哪块网卡”，故反过来逐一把候选 IP 指定为 sourceAddress 去连公网：
-  /// 能连通的那块才是真正出网的网卡（不存在/无路由/已拔线的地址会瞬间失败）。
-  /// 候选按网卡名评分排序（无线/热点 > 有线 > 虚拟），全不可达时退化取评分最高者，
-  /// 从而即便手机热点探测偶发超时，也只会落到无线而非残留的有线 IP。
-  Future<String?> _lanIp() async {
-    final candidates = await _privateCandidates(); // 已按无线优先排序
-    for (final ip in candidates) {
-      if (await _reachesInternet(ip)) return ip;
+  /// “该用哪个 IP”本质上只有对端能裁定——只有与对端同子网的地址才能建立 TCP 连接。
+  /// 这里对每个候选做一次短超时的 TCP 连接探测（服务端绑在 anyIPv4，可达即连得上），
+  /// 首个成功的即为正确地址；不同子网/不可达的地址会被快速跳过。全部失败返回 null。
+  Future<String?> pickReachableHost({
+    required List<String> hosts,
+    required int port,
+  }) async {
+    for (final h in hosts) {
+      Socket? probe;
+      try {
+        probe = await Socket.connect(h, port,
+            timeout: const Duration(milliseconds: 1500));
+        return h;
+      } catch (_) {
+        // 不可达/不同子网，试下一个
+      } finally {
+        probe?.destroy();
+      }
     }
-    // 全不可达（隔离局域网 / 离线 / 探测全超时）：退化为评分最高的候选。
-    return candidates.isEmpty ? null : candidates.first;
+    return null;
   }
 
-  /// 收集本机私网 IPv4，按网卡名评分降序排序；同分再按 IP 字典序，保证结果确定，
-  /// 不会因排序不稳定而在多次刷新间翻转。
+  /// 收集本机私网 IPv4，按网卡名评分降序排序；同分再按 IP 字典序，保证结果确定。
+  /// 评分（无线/热点 > 有线 > 虚拟）只用于决定对端的“尝试顺序”，让最可能的地址排在
+  /// 前面以减少试连次数——正确性由对端的实际连通性裁定，不再依赖评分。
   Future<List<String>> _privateCandidates() async {
     final ifaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4, includeLoopback: false);
@@ -221,22 +230,6 @@ class LanSyncService {
       return byScore != 0 ? byScore : a.ip.compareTo(b.ip);
     });
     return [for (final e in scored) e.ip];
-  }
-
-  /// 以 [sourceIp] 为源地址尝试连公网：成功即说明该网卡能出网（真正的局域网网卡）。
-  /// 不存在 / 无路由 / 已拔线的源地址会立即失败；超时放宽到 1.5s，给走蜂窝的手机
-  /// 热点（握手较慢）留出足够余量，避免误判为不可达而回退到错误网卡。
-  Future<bool> _reachesInternet(String sourceIp) async {
-    Socket? socket;
-    try {
-      socket = await Socket.connect('8.8.8.8', 443,
-          sourceAddress: sourceIp, timeout: const Duration(milliseconds: 1500));
-      return true;
-    } catch (_) {
-      return false;
-    } finally {
-      socket?.destroy();
-    }
   }
 
   /// 网卡名打分（大小写无关）：无线/热点优先于有线，二者都优先于已知虚拟网卡。
@@ -283,37 +276,47 @@ class LanSyncService {
   }
 }
 
-/// 发起端连接信息：局域网 IP、端口、配对码。
+/// 发起端连接信息：全部局域网候选 IP、端口、配对码。
+/// 二维码携带全部候选地址，对端逐个试连，无需主机侧猜“哪个 IP 对”。
 class LanServerInfo {
-  final String? ip;
+  final List<String> ips;
   final int port;
   final String token;
 
-  const LanServerInfo({required this.ip, required this.port, required this.token});
+  const LanServerInfo(
+      {required this.ips, required this.port, required this.token});
 
-  /// 仅替换 IP（端口/配对码不变）；传 null 表示当前无可用局域网地址。
-  LanServerInfo withIp(String? ip) =>
-      LanServerInfo(ip: ip, port: port, token: token);
+  /// 仅替换候选 IP 列表（端口/配对码不变）；空列表表示当前无可用局域网地址。
+  LanServerInfo withIps(List<String> ips) =>
+      LanServerInfo(ips: ips, port: port, token: token);
 
-  /// 二维码载荷（私有协议，仅本 App 识别）。
+  /// 二维码载荷（私有协议，仅本 App 识别）。`hosts` 为全部候选地址。
   String toQrPayload() => jsonEncode({
-        'v': 1,
+        'v': 2,
         'app': 'mark_recoder',
-        'host': ip,
+        'hosts': ips,
         'port': port,
         'token': token,
       });
 
   /// 解析扫描/手动得到的配对信息；非本 App 的二维码返回 null。
-  static ({String host, int port, String token})? parse(String raw) {
+  /// 兼容旧版（v1，单个 `host` 字段）与新版（v2，`hosts` 列表）。
+  static ({List<String> hosts, int port, String token})? parse(String raw) {
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
       if (json['app'] != 'mark_recoder') return null;
-      final host = json['host'] as String?;
       final port = json['port'] as int?;
       final token = json['token'] as String?;
-      if (host == null || port == null || token == null) return null;
-      return (host: host, port: port, token: token);
+      if (port == null || token == null) return null;
+      final hosts = <String>[
+        if (json['hosts'] is List)
+          for (final h in json['hosts'] as List)
+            if (h is String && h.isNotEmpty) h,
+        if (json['host'] is String && (json['host'] as String).isNotEmpty)
+          json['host'] as String,
+      ];
+      if (hosts.isEmpty) return null;
+      return (hosts: hosts, port: port, token: token);
     } catch (_) {
       return null;
     }
