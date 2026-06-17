@@ -192,47 +192,47 @@ class LanSyncService {
   /// 的网卡：对一个公网地址发起连接（仅触发选路、不真正传输数据），操作系统据路由
   /// 选出的本地源地址即为正确的局域网 IP。无网络时退化为按网卡名排序的启发式枚举。
   Future<String?> _lanIp() async {
-    final routed = await _routedSourceIp();
-    if (routed != null && _isPrivateV4(routed)) return routed;
-
-    final ranked = await _rankedPrivateIp();
-    if (ranked != null) return ranked;
-
-    return routed; // 兜底：即便不在私网段，也好过返回 null
-  }
-
-  /// 借系统路由表选出真正出网网卡的源地址：连一个公网地址，读本地端地址。
-  /// 仅为触发选路，不依赖对方真正收发数据；失败（离线/被拦截）返回 null。
-  Future<String?> _routedSourceIp() async {
-    Socket? socket;
-    try {
-      socket = await Socket.connect('8.8.8.8', 443,
-          timeout: const Duration(milliseconds: 700));
-      return socket.address.address; // 本地源地址
-    } catch (_) {
-      return null;
-    } finally {
-      socket?.destroy();
+    final candidates = await _privateCandidates(); // 已按物理网卡优先排序
+    // 逐个把候选 IP 当源地址探测公网可达性：能连通的才是真正出网的网卡。
+    // Dart 的 Socket 不暴露本地源地址，无法直接读“系统选了哪块网卡”，
+    // 故反过来逐一指定 sourceAddress 主动验证（不存在/无路由的地址会瞬间失败）。
+    for (final ip in candidates) {
+      if (await _reachesInternet(ip)) return ip;
     }
+    // 全不可达（隔离局域网 / 离线）：退化为评分最高的候选。
+    return candidates.isEmpty ? null : candidates.first;
   }
 
-  /// 退化方案：枚举网卡，物理网卡（Wi-Fi / 以太网）优先，已知虚拟网卡靠后。
-  Future<String?> _rankedPrivateIp() async {
+  /// 收集本机私网 IPv4，按网卡名评分降序（物理网卡在前、已知虚拟网卡在后）。
+  Future<List<String>> _privateCandidates() async {
     final ifaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4, includeLoopback: false);
-    String? best;
-    var bestScore = -1 << 30;
+    final scored = <({String ip, int score})>[];
     for (final iface in ifaces) {
       final score = _ifaceScore(iface.name);
       for (final addr in iface.addresses) {
-        if (!_isPrivateV4(addr.address)) continue;
-        if (score > bestScore) {
-          bestScore = score;
-          best = addr.address;
+        if (_isPrivateV4(addr.address)) {
+          scored.add((ip: addr.address, score: score));
         }
       }
     }
-    return best;
+    scored.sort((a, b) => b.score.compareTo(a.score));
+    return [for (final e in scored) e.ip];
+  }
+
+  /// 以 [sourceIp] 为源地址尝试连公网：成功即说明该网卡能出网（真正的局域网网卡）。
+  /// 不存在 / 无路由的源地址会立即失败，不会卡满超时。
+  Future<bool> _reachesInternet(String sourceIp) async {
+    Socket? socket;
+    try {
+      socket = await Socket.connect('8.8.8.8', 443,
+          sourceAddress: sourceIp, timeout: const Duration(milliseconds: 700));
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      socket?.destroy();
+    }
   }
 
   /// 网卡名打分：物理网卡加分，已知虚拟网卡减分（大小写无关）。
